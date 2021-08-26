@@ -1,0 +1,5 @@
+terraform/s3_terraform_bucket/.terraform
+terraform/s3_terraform_bucket/.terraform.lock.hcl
+terraform/s3_terraform_bucket/terraform.tfstate
+terraform/.terraform.lock.hcl
+terraform/.terraform

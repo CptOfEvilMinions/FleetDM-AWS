@@ -77,29 +77,73 @@ resource "aws_subnet" "fleet_private_b_subnet" {
   }
 }
 
-# resource "aws_route_table" "private_route_table" {
-#   vpc_id = aws_vpc.fleet_vpc.id
-#   route {
-#     cidr_block = "0.0.0.0/0"
-#     gateway_id = aws_internet_gateway.VPC_IGW.id
-#   }
-
-#   tags = {
-#     Name = "${var.FLEET_PREFIX}_VPC_public_route_table"
-#     Team = var.team
-#  	}
-# }
+resource "aws_eip" "nat_gw_a_eip" {
+    vpc = true
+    tags = {
+        Name = "${var.FLEET_PREFIX}_NAT_A_gateway_eip"
+    }
+}
 
 
+resource "aws_eip" "nat_gw_b_eip" {
+    vpc = true
+    tags = {
+        Name = "${var.FLEET_PREFIX}_NAT_B_gateway_eip"
+    }
+}
+
+resource "aws_nat_gateway" "nat_A_gw" {
+    allocation_id = aws_eip.nat_gw_a_eip.id
+    subnet_id     = aws_subnet.fleet_private_a_subnet.id
+    tags = {
+        Name = "${var.FLEET_PREFIX}_NAT_A_gateway"
+    }
+
+}
+
+resource "aws_nat_gateway" "nat_B_gw" {
+    allocation_id = aws_eip.nat_gw_b_eip.id
+    subnet_id     = aws_subnet.fleet_private_b_subnet.id
+    tags = {
+        Name = "${var.FLEET_PREFIX}_NAT_B_gateway"
+    }
+
+}
+
+resource "aws_route_table" "fleet_private_a_route_table" {
+  vpc_id = aws_vpc.fleet_vpc.id
+  route {
+    cidr_block = "0.0.0.0/0"
+    gateway_id = aws_nat_gateway.nat_A_gw.id
+  }
+
+  tags = {
+    Name = "${var.FLEET_PREFIX}_VPC_public_A_route_table"
+    Team = var.team
+ 	}
+}
+
+resource "aws_route_table" "fleet_private_b_route_table" {
+  vpc_id = aws_vpc.fleet_vpc.id
+  route {
+    cidr_block = "0.0.0.0/0"
+    gateway_id = aws_nat_gateway.nat_B_gw.id
+  }
+
+  tags = {
+    Name = "${var.FLEET_PREFIX}_VPC_public_B_route_table"
+    Team = var.team
+ 	}
+}
 
 
-# # Associate the management Route Table with the management Subnet
-# resource "aws_route_table_association" "fleet_private_a_subnet_route_table_association" {
-#   subnet_id      = aws_subnet.fleet_private_a_subnet.id
-#   route_table_id = aws_route_table.private_route_table.id
-# }
+# Associate the management Route Table with the management Subnet
+resource "aws_route_table_association" "fleet_private_a_subnet_route_table_association" {
+  subnet_id      = aws_subnet.fleet_private_a_subnet.id
+  route_table_id = aws_route_table.fleet_private_a_route_table.id
+}
 
-# resource "aws_route_table_association" "fleet_private_b_subnet_route_table_association" {
-#   subnet_id      = aws_subnet.fleet_private_b_subnet.id
-#   route_table_id = aws_route_table.private_route_table.id
-# }
+resource "aws_route_table_association" "fleet_private_b_subnet_route_table_association" {
+  subnet_id      = aws_subnet.fleet_private_b_subnet.id
+  route_table_id = aws_route_table.fleet_private_b_route_table.id
+}
