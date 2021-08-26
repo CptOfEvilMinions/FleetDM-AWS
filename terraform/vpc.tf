@@ -94,7 +94,7 @@ resource "aws_eip" "nat_gw_b_eip" {
 
 resource "aws_nat_gateway" "nat_A_gw" {
     allocation_id = aws_eip.nat_gw_a_eip.id
-    subnet_id     = aws_subnet.fleet_private_a_subnet.id
+    subnet_id     = aws_subnet.fleet_public_subnet.id
     tags = {
         Name = "${var.FLEET_PREFIX}_NAT_A_gateway"
     }
@@ -103,7 +103,7 @@ resource "aws_nat_gateway" "nat_A_gw" {
 
 resource "aws_nat_gateway" "nat_B_gw" {
     allocation_id = aws_eip.nat_gw_b_eip.id
-    subnet_id     = aws_subnet.fleet_private_b_subnet.id
+    subnet_id     = aws_subnet.fleet_public_subnet.id
     tags = {
         Name = "${var.FLEET_PREFIX}_NAT_B_gateway"
     }
@@ -118,7 +118,7 @@ resource "aws_route_table" "fleet_private_a_route_table" {
   }
 
   tags = {
-    Name = "${var.FLEET_PREFIX}_VPC_public_A_route_table"
+    Name = "${var.FLEET_PREFIX}_VPC_private_A_route_table"
     Team = var.team
  	}
 }
@@ -131,7 +131,7 @@ resource "aws_route_table" "fleet_private_b_route_table" {
   }
 
   tags = {
-    Name = "${var.FLEET_PREFIX}_VPC_public_B_route_table"
+    Name = "${var.FLEET_PREFIX}_VPC_private_B_route_table"
     Team = var.team
  	}
 }

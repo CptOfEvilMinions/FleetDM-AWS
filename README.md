@@ -1,7 +1,7 @@
 # FleetDM-AWS
 
 ## References
-* []()
+* [VPC with public and private subnets (NAT)](https://docs.aws.amazon.com/vpc/latest/userguide/VPC_Scenario2.html)
 * []()
 * []()
 * []()

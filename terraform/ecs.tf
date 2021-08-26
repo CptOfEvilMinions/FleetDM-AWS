@@ -59,6 +59,7 @@ data "aws_iam_policy_document" "ecs-task-assume-role" {
   }
 }
 
+
 # Normally we'd prefer not to hardcode an ARN in our Terraform, but since this is
 # an AWS-managed policy, it's okay.
 data "aws_iam_policy" "ecs-task-execution-role" {
@@ -92,6 +93,13 @@ resource "aws_security_group" "fleet_ingress_sg" {
     protocol    = "TCP"
     cidr_blocks = ["0.0.0.0/0"]
   }
+  egress {
+    from_port        = 0
+    to_port          = 0
+    protocol         = "-1"
+    cidr_blocks      = ["0.0.0.0/0"]
+    ipv6_cidr_blocks = ["::/0"]
+  }
 }
 resource "aws_ecs_task_definition" "fleet_ecs_web" {
   family = "fleet_ecs_service"
@@ -110,6 +118,12 @@ resource "aws_ecs_task_definition" "fleet_ecs_web" {
       ],
       "memory": 512,
       "cpu": 256,
+      "secrets": [
+        {
+          "name": "FLEET_MYSQL_PASSWORD",
+          "valueFrom": "fleet/db_password"
+        }
+      ],
       "logConfiguration": {
         "logDriver": "awslogs",
         "options": {
