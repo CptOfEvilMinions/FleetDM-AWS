@@ -1,7 +1,16 @@
 ############################# Create RDS ##############################
-data "aws_secretsmanager_secret_version" "db_creds" {
-  # Fill in the name you gave to your secret
-  secret_id = "fleet/db_password"
+resource "random_password" "database_password" {
+  length  = 16
+  special = false
+}
+
+resource "aws_secretsmanager_secret" "database_password_secret" {
+  name = "/fleet/database/password/master"
+}
+
+resource "aws_secretsmanager_secret_version" "database_password_secret_version" {
+  secret_id     = aws_secretsmanager_secret.database_password_secret.id
+  secret_string = random_password.database_password.result
 }
 
 resource "aws_security_group" "mysql_sg" {
@@ -44,7 +53,7 @@ resource "aws_db_instance" "fleet_mysql_server" {
   instance_class          = "db.t3.micro"
   name                    = "fleet"
   username                = "fleet"   
-  password                = data.aws_secretsmanager_secret_version.db_creds.secret_string
+  password                = random_password.database_password.result
   skip_final_snapshot     = true
   multi_az                = false
   parameter_group_name    = "default.mysql8.0"

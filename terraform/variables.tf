@@ -28,7 +28,8 @@ variable "vpc_subnets" {
   default = {
     "private-a" = "172.16.34.0/24"
     "private-b" = "172.16.35.0/24"
-    "public" = "172.16.43.0/24"
+    "public-a" = "172.16.43.0/24"
+    "public-b" = "172.16.44.0/24"
   }
 }
 

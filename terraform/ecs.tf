@@ -13,7 +13,7 @@ resource "aws_ecs_service" "fleet_ecs_service" {
   cluster         = aws_ecs_cluster.fleet_ecs_cluster.id
   launch_type     = "FARGATE"
 
-  desired_count = 1
+  desired_count = 3
 
   network_configuration {
     assign_public_ip = false
@@ -24,6 +24,14 @@ resource "aws_ecs_service" "fleet_ecs_service" {
       aws_subnet.fleet_private_b_subnet.id,
     ]
   }
+
+  load_balancer {
+    target_group_arn = aws_alb_target_group.main.arn
+    container_name   = "fleet_ecs_web"
+    container_port   = 8080
+  }
+
+  depends_on = [aws_alb_listener.main]
 
   tags = {
     Team = var.team
@@ -43,33 +51,63 @@ resource "aws_ecs_service" "fleet_ecs_service" {
 ############################## Create IAM role ##############################
 # The assume_role_policy field works with the following aws_iam_policy_document to allow
 # ECS tasks to assume this role we're creating.
-resource "aws_iam_role" "fleet-task-execution-role" {
-  name               = "fleet-task-execution-role"
-  assume_role_policy = data.aws_iam_policy_document.ecs-task-assume-role.json
+data "aws_iam_policy_document" "fleet" {
+  statement {
+    effect    = "Allow"
+    actions   = ["cloudwatch:PutMetricData"]
+    resources = ["*"]
+  }
+
+  statement {
+    effect = "Allow"
+    actions = ["secretsmanager:GetSecretValue"]
+    resources = [aws_secretsmanager_secret.database_password_secret.arn]
+  }
+
+  statement {
+    effect    = "Allow"
+    actions   = ["iam:CreateServiceLinkedRole"]
+    resources = ["arn:aws:iam::*:role/aws-service-role/ecs.amazonaws.com/AWSServiceRoleForECS*"]
+    condition {
+      test = "StringLike"
+      values = [
+        "ecs.amazonaws.com"
+      ]
+      variable = "iam:AWSServiceName"
+    }
+  }
+
 }
 
-data "aws_iam_policy_document" "ecs-task-assume-role" {
+data "aws_iam_policy_document" "assume_role" {
   statement {
+    effect  = "Allow"
     actions = ["sts:AssumeRole"]
-
     principals {
-      type = "Service"
-      identifiers = ["ecs-tasks.amazonaws.com"]
+      identifiers = ["ecs.amazonaws.com", "ecs-tasks.amazonaws.com"]
+      type        = "Service"
     }
   }
 }
 
-
-# Normally we'd prefer not to hardcode an ARN in our Terraform, but since this is
-# an AWS-managed policy, it's okay.
-data "aws_iam_policy" "ecs-task-execution-role" {
-  arn = "arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy"
+resource "aws_iam_role" "main" {
+  name               = "fleetdm-role"
+  assume_role_policy = data.aws_iam_policy_document.assume_role.json
 }
 
-# Attach the above policy to the execution role.
-resource "aws_iam_role_policy_attachment" "ecs-task-execution-role" {
-  role       = aws_iam_role.fleet-task-execution-role.name
-  policy_arn = data.aws_iam_policy.ecs-task-execution-role.arn
+resource "aws_iam_role_policy_attachment" "role_attachment" {
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy"
+  role       = aws_iam_role.main.name
+}
+
+resource "aws_iam_policy" "main" {
+  name   = "fleet-iam-policy"
+  policy = data.aws_iam_policy_document.fleet.json
+}
+
+resource "aws_iam_role_policy_attachment" "attachment" {
+  policy_arn = aws_iam_policy.main.arn
+  role       = aws_iam_role.main.name
 }
 
 ############################## Create Cloudwatch for ECS ##############################
@@ -105,25 +143,48 @@ resource "aws_ecs_task_definition" "fleet_ecs_web" {
   family = "fleet_ecs_service"
   
 
-  container_definitions = <<EOF
+  container_definitions = jsonencode(
   [
     {
       "name": "fleet_ecs_web",
       "image": "fleetdm/fleet:v${var.fleet_version}",
+      "cpu": 256,
+      "memory": 512,
+      mountPoints = []
+      volumesFrom = []
+      essential   = true
       "portMappings": [
         {
           "containerPort": 8080,
           "hostPort": 8080
         }
       ],
-      "memory": 512,
-      "cpu": 256,
+      networkMode = "awsvpc"
+      command = ["sh", "-c", "fleet prepare db && fleet serve"]
       "secrets": [
         {
           "name": "FLEET_MYSQL_PASSWORD",
-          "valueFrom": "fleet/db_password"
+          "valueFrom": aws_secretsmanager_secret.database_password_secret.arn
         }
       ],
+      environment = [
+        {
+          name  = "FLEET_MYSQL_USERNAME"
+          value = "fleet"
+        },
+        {
+          name  = "FLEET_MYSQL_ADDRESS"
+          value = "${aws_db_instance.fleet_mysql_server.endpoint}"
+        },
+        {
+          name  = "FLEET_REDIS_ADDRESS"
+          value = "${aws_elasticache_cluster.fleet_redis.cache_nodes.0.address}:6379"
+        },
+        {
+          name  = "FLEET_SERVER_TLS"
+          value = "false"
+        }
+      ]
       "logConfiguration": {
         "logDriver": "awslogs",
         "options": {
@@ -133,15 +194,15 @@ resource "aws_ecs_task_definition" "fleet_ecs_web" {
         }
       }
     }
-  ]
-  EOF
+  ])
 
   requires_compatibilities = ["FARGATE"]
   network_mode             = "awsvpc"
   memory                   = 512
   cpu                      = 256
-  execution_role_arn       = aws_iam_role.fleet-task-execution-role.arn
-  
+  execution_role_arn       = aws_iam_role.main.arn
+  task_role_arn            = aws_iam_role.main.arn
+
   tags = {
     Team = var.team
   }
